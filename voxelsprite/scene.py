@@ -1,3 +1,4 @@
+"""Renderização OpenGL da malha, grade e prévia em baixa resolução."""
 import math
 import numpy as np
 import moderngl
@@ -29,6 +30,11 @@ frag=vec4(mix(background,c.rgb,c.a),1);}
 '''
 
 def camera_matrix(yaw,pitch,distance,target,aspect,radius,orthographic=False):
+    """Monta a matriz que transforma pontos do mundo em coordenadas da câmera.
+
+    Calcula a posição orbital, eixos da câmera e projeção (perspectiva ou
+    ortográfica) e combina as matrizes para uso no shader de vértices.
+    """
     y,p=math.radians(yaw),math.radians(pitch)
     eye=np.array(target)+distance*np.array([math.cos(p)*math.sin(y),math.sin(p),math.cos(p)*math.cos(y)])
     forward=np.array(target)-eye;forward/=np.linalg.norm(forward)
@@ -47,6 +53,8 @@ def camera_matrix(yaw,pitch,distance,target,aspect,radius,orthographic=False):
     return (projection@view).astype('f4')
 
 class Scene:
+    """Mantém recursos OpenGL e desenha a geometria preparada pelo motor."""
+
     def __init__(self,ctx):
         self.ctx=ctx;self.program=ctx.program(vertex_shader=VERTEX,fragment_shader=FRAGMENT)
         self.vbo=self.vao=None
@@ -55,6 +63,7 @@ class Scene:
         self.blit_vao=ctx.vertex_array(self.blit,[(self.quad,'2f','pos')])
         self.grid_vbo=self.grid_vao=None
     def upload(self,mesh):
+        """Substitui os buffers OpenGL pela malha atual."""
         for r in (self.vao,self.vbo):
             if r is not None:r.release()
         self.vao=self.vbo=None
@@ -62,6 +71,7 @@ class Scene:
             self.vbo=self.ctx.buffer(mesh.vertex_data().tobytes())
             self.vao=self.ctx.vertex_array(self.program,[(self.vbo,'3f 3f 3f','in_position','in_normal','in_color')])
     def grid(self,shape):
+        """Cria linhas no chão e arestas de referência ao redor da grade."""
         for r in (self.grid_vao,self.grid_vbo):
             if r is not None:r.release()
         h,w,d=shape;ys=-h/2;vertices=[]
@@ -83,6 +93,7 @@ class Scene:
         self.grid_vbo=self.ctx.buffer(np.array(vertices,dtype='f4').tobytes())
         self.grid_vao=self.ctx.vertex_array(self.program,[(self.grid_vbo,'3f 3f 3f','in_position','in_normal','in_color')])
     def draw(self,fbo,mvp,lighting=True,light=(-.4,.8,1),grid=False):
+        """Renderiza grade e modelo no framebuffer solicitado."""
         fbo.use();self.ctx.viewport=(0,0,*fbo.size)
         # QPainter usa o mesmo contexto; restaure os estados que ele altera.
         self.ctx.scissor=None;self.ctx.enable_only(moderngl.DEPTH_TEST|moderngl.CULL_FACE)
@@ -95,11 +106,13 @@ class Scene:
         if self.vao:
             self.program['lighting'].value=lighting;self.vao.render(moderngl.TRIANGLES)
     def frame(self,mvp,size,lighting=True,light=(-.4,.8,1)):
+        """Renderiza fora da janela e devolve um quadro RGBA para exportação."""
         tex=self.ctx.texture((size,size),4);depth=self.ctx.depth_renderbuffer((size,size));fbo=self.ctx.framebuffer([tex],depth)
         try:
             self.draw(fbo,mvp,lighting,light)
             return Image.frombytes('RGBA',(size,size),fbo.read(components=4,alignment=1)).transpose(Image.Transpose.FLIP_TOP_BOTTOM)
         finally:fbo.release();depth.release();tex.release()
     def release(self):
+        """Libera os recursos gráficos quando a janela/contexto está sendo fechada."""
         for r in (self.vao,self.vbo,self.grid_vao,self.grid_vbo,self.program,self.blit_vao,self.quad,self.blit):
             if r is not None:r.release()

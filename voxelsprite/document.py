@@ -13,6 +13,13 @@ MAX_SIDE = 144
 MAX_VOXELS = 1_000_000
 
 class Document:
+    """Estado editável do modelo: voxels, cores por face, seleção e histórico.
+
+    ``occupied[y, x, z]`` indica se uma célula contém um voxel. As cores ficam
+    em ``colors[y, x, z, face, rgb]``; ``face`` segue a ordem de ``FACES`` em
+    :mod:`voxelsprite.core`.
+    """
+
     def __init__(self,shape=(32,32,32)):
         if len(shape)!=3 or any(not 1<=int(n)<=MAX_SIDE for n in shape):
             raise ValueError('Grade inválida; cada dimensão deve estar entre 1 e 144.')
@@ -24,6 +31,7 @@ class Document:
 
     @classmethod
     def from_mesh(cls,mesh,padding=4):
+        """Converte uma malha importada para a grade editável e centraliza-a."""
         if mesh.voxel_count>MAX_VOXELS:raise ValueError("Modelo acima de um milhão de voxels. Reduza a resolução ou a profundidade.")
         shape=np.array(mesh.occupied.shape)
         pads=np.minimum(padding,(MAX_SIDE-shape)//2)
@@ -43,15 +51,19 @@ class Document:
         return obj
 
     def inside(self,p):
+        """Retorna se as coordenadas inteiras estão dentro da grade."""
         return all(0<=int(v)<n for v,n in zip(p,self.occupied.shape))
 
     def exists(self,p):
+        """Retorna se existe um voxel em uma coordenada interna da grade."""
         return self.inside(p) and bool(self.occupied[tuple(p)])
 
     def begin(self):
+        """Inicia uma transação de edição, guardando o estado antes da primeira alteração."""
         if self.pending is None:self.pending={}
 
     def set_voxel(self,p,exists,colors=None):
+        """Registra o valor anterior e altera ocupação e, opcionalmente, as seis cores."""
         p=tuple(map(int,p))
         if not self.inside(p):return False
         if self.pending is None:self.begin()
@@ -61,6 +73,7 @@ class Document:
         return True
 
     def commit(self):
+        """Fecha a transação e guarda apenas as diferenças reais para desfazer/refazer."""
         if self.pending is None:return False
         diff={}
         for p,(old,oldc) in self.pending.items():
@@ -76,23 +89,27 @@ class Document:
         return True
 
     def rollback(self):
+        """Descarta a transação atual e restaura cada voxel ao estado inicial."""
         if self.pending:
             for p,(exists,colors) in self.pending.items():self.occupied[p]=exists;self.colors[p]=colors
         self.pending=None
 
     def undo(self):
+        """Aplica o estado anterior da última transação e guarda-a para refazer."""
         if not self.history:return False
         diff=self.history.pop()
         for p,(before,after) in diff.items():self.occupied[p]=before[0];self.colors[p]=before[1]
         self.redos.append(diff);self.selection.clear();self.revision+=1;return True
 
     def redo(self):
+        """Reaplica a última transação desfeita."""
         if not self.redos:return False
         diff=self.redos.pop()
         for p,(before,after) in diff.items():self.occupied[p]=after[0];self.colors[p]=after[1]
         self.history.append(diff);self.selection.clear();self.revision+=1;return True
 
     def mesh(self):
+        """Calcula a malha externa atual, lendo a cor correspondente a cada normal."""
         return surface_mesh(self.occupied,self.colors[:,:,:,0,:].max(axis=2),
                             lambda n,ys,xs,zs:self.colors[ys,xs,zs,NORMALS.index(n)])
 
@@ -135,6 +152,7 @@ class Document:
                 if q not in seen and self.inside(q):seen.add(q);queue.append(q)
 
     def transform_selection(self,delta,copy=False):
+        """Move ou copia a seleção após validar limites, colisões e limites do modelo."""
         if not self.selection:return False
         delta=np.array(delta,dtype=int)
         pairs=[(p,tuple(np.array(p)+delta)) for p in self.selection if self.exists(p)]
@@ -153,6 +171,7 @@ class Document:
         changed=self.commit();self.selection={q for q,_ in values};return changed
 
     def delete_selection(self):
+        """Apaga a seleção como uma única transação reversível."""
         self.begin()
         for p in self.selection:self.set_voxel(p,False)
         try:self.mesh()
@@ -161,16 +180,19 @@ class Document:
         changed=self.commit();self.selection.clear();return changed
 
     def world_centers(self,coords):
+        """Converte coordenadas da matriz (linha, coluna, profundidade) para XYZ."""
         h,w,d=self.occupied.shape
         arr=np.asarray(coords)
         return np.column_stack((arr[:,1]+.5-w/2,h/2-arr[:,0]-.5,arr[:,2]+.5-d/2))
 
     def coords_from_world(self,points):
+        """Converte pontos XYZ do mundo para índices inteiros da grade."""
         h,w,d=self.occupied.shape
         p=np.asarray(points)
         return np.floor(np.column_stack((h/2-p[:,1],p[:,0]+w/2,p[:,2]+d/2))).astype(int)
 
     def resize(self,side):
+        """Cria um documento cúbico maior/menor, centralizando voxels sem cortá-los."""
         if not 8<=side<=128:raise ValueError('A grade precisa ter 8–128 células por eixo.')
         old=np.array(self.occupied.shape);new=np.array([side]*3);shift=(new-old)//2
         coords=np.argwhere(self.occupied);target=coords+shift
@@ -182,6 +204,7 @@ class Document:
 
 
 def save_project(document,path,settings=None):
+    """Salva só os voxels ocupados, suas seis cores e opções da interface em JSON."""
     coords=np.argwhere(document.occupied)
     data={'format':'voxelsprite','version':2,'shape':list(document.occupied.shape),
           'voxels':coords.tolist(),'face_colors':document.colors[tuple(coords.T)].reshape(-1,18).tolist(),
@@ -195,6 +218,7 @@ def save_project(document,path,settings=None):
 
 
 def load_project(path):
+    """Lê e valida um projeto JSON antes de preencher as matrizes do documento."""
     path=Path(path)
     if path.stat().st_size>100*1024*1024:raise ValueError('Projeto maior que 100 MB.')
     data=json.loads(path.read_text(encoding='utf-8'))

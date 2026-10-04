@@ -1,3 +1,4 @@
+"""Testes do documento editável, seleção, picking, projetos e exportações."""
 import tempfile
 import json
 import unittest
@@ -10,7 +11,10 @@ from voxelsprite.picking import raycast
 from voxelsprite.exports import orthographic_views,export_atlas_obj,save_gif,sprite_sheet,export_orthographic
 
 class EditorTests(unittest.TestCase):
+    """Agrupa testes de comportamento do documento sem depender da janela Qt."""
+
     def document(self):
+        """Monta um volume pequeno de teste com margem editável ao redor."""
         a=np.full((3,4,4),255,dtype='uint8');a[:,:,:3]=[90,120,180]
         return Document.from_mesh(voxelize(a,2,0),padding=2)
     def test_mesh_to_document_preserves_geometry_and_face_colors(self):

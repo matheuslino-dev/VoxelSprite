@@ -37,6 +37,7 @@ def orthographic_views(doc):
 
 
 def export_orthographic(doc,folder):
+    """Grava seis projeções PNG e uma folha de referência lado a lado."""
     folder=Path(folder);folder.mkdir(parents=True,exist_ok=True)
     views=orthographic_views(doc)
     for key,img in views.items():img.save(folder/f'{key}.png')
@@ -48,12 +49,14 @@ def export_orthographic(doc,folder):
 
 
 def outline_image(image,color=(15,15,20),width=1):
+    """Cria um contorno expandindo a máscara alfa e compondo-a atrás da imagem."""
     alpha=image.getchannel('A');expanded=alpha.filter(ImageFilter.MaxFilter(2*width+1))
     layer=Image.new('RGBA',image.size,(*color,0));layer.putalpha(expanded)
     return Image.alpha_composite(layer,image)
 
 
 def sprite_sheet(frames,columns=8):
+    """Organiza quadros RGBA em uma grade com número de colunas configurável."""
     if not frames:raise ValueError('Nenhum quadro para exportar.')
     w,h=frames[0].size;columns=min(columns,len(frames));rows=math.ceil(len(frames)/columns)
     sheet=Image.new('RGBA',(w*columns,h*rows))
@@ -62,6 +65,7 @@ def sprite_sheet(frames,columns=8):
 
 
 def save_gif(frames,path,duration=100):
+    """Converte quadros para uma paleta comum e reserva um índice para transparência."""
     # Paleta global de 255 cores + índice 255 reservado à transparência.
     overview=sprite_sheet(frames).convert('RGB')
     palette=overview.quantize(colors=255)
@@ -81,6 +85,7 @@ def export_atlas_obj(mesh,path):
     path=Path(path).with_suffix('.obj')
     tag=hashlib.sha256(path.name.encode()).hexdigest()[:10]
     mtl=path.with_name(f'material_{tag}.mtl');texture=path.with_name(f'atlas_{tag}.png')
+    # A mesma cor reutiliza a mesma célula do atlas e o mesmo índice de UV.
     colors,indices=np.unique(mesh.colors,axis=0,return_inverse=True)
     n=math.ceil(math.sqrt(len(colors)));tile=4
     pixels=np.zeros((n*tile,n*tile,3),dtype='uint8')

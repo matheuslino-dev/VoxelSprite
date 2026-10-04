@@ -1,3 +1,4 @@
+"""Testes do motor: imagens de entrada, voxelização, malha e arquivo OBJ."""
 import tempfile
 import unittest
 from pathlib import Path
@@ -6,7 +7,10 @@ from PIL import Image
 from voxelsprite.core import voxelize, read_sprite, export_obj
 
 class CoreTests(unittest.TestCase):
+    """Verifica resultados geométricos e de exportação sem abrir a interface."""
+
     def sprite(self,h,w):
+        """Cria uma imagem RGBA opaca para ser usada como entrada de teste."""
         a = np.full((h,w,4),255,dtype='uint8')
         a[:,:,:3] = [22,120,220]
         return a

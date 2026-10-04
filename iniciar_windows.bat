@@ -4,6 +4,7 @@ cd /d "%~dp0"
 chcp 65001 >nul
 title VoxelSprite Studio
 
+rem Reuse the local environment; otherwise find an installed supported Python.
 if exist ".venv\Scripts\python.exe" goto check_environment
 where py >nul 2>nul
 if not errorlevel 1 (
@@ -27,6 +28,7 @@ pause
 exit /b 1
 
 :check_environment
+rem Stop with a clear message if Python or the virtual environment is invalid.
 if not exist ".venv\Scripts\python.exe" (
     echo Nao foi possivel preparar o Python. Extraia o ZIP para uma pasta com permissao de escrita.
     pause
@@ -40,6 +42,7 @@ if errorlevel 1 (
 )
 if exist ".venv\voxelsprite_instalado.txt" goto run
 
+rem Install dependencies only on first launch, then mark installation complete.
 echo Preparando o VoxelSprite. A primeira abertura precisa de internet...
 ".venv\Scripts\python.exe" -m pip install -r requirements.txt
 if errorlevel 1 (
@@ -50,6 +53,7 @@ if errorlevel 1 (
 echo 2.0.0>".venv\voxelsprite_instalado.txt"
 
 :run
+rem Start the desktop app and keep the console open if it reports a failure.
 ".venv\Scripts\python.exe" main.py
 if errorlevel 1 (
     echo.

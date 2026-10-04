@@ -1,7 +1,9 @@
+"""Ponto de entrada: configura o contexto OpenGL e inicia a aplicação Qt."""
 import sys
 from pathlib import Path
 
 def main():
+    """Prepara OpenGL 3.3, cria a janela principal e executa o loop de eventos."""
     from PySide6.QtWidgets import QApplication
     from PySide6.QtGui import QSurfaceFormat
     fmt = QSurfaceFormat()

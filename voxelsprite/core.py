@@ -1,4 +1,8 @@
-"""Motor independente da interface: silhueta, malha externa e OBJ/MTL."""
+"""Motor 3D independente da interface: imagens -> voxels -> malhas -> OBJ/MTL.
+
+Este módulo concentra as operações geométricas e não depende do Qt. Assim, a
+reconstrução pode ser testada e reutilizada separadamente da interface gráfica.
+"""
 from dataclasses import dataclass
 from pathlib import Path
 import os
@@ -10,6 +14,12 @@ MAX_FACES = 400_000
 
 @dataclass
 class Mesh:
+    """Malha de quads externos e os dados de voxel que deram origem a ela.
+
+    Cada quad tem quatro vértices em coordenadas do mundo, normal por face e
+    cor RGB. ``occupied`` e ``base_rgb`` são mantidos para reconstruir o
+    documento editável depois da importação de imagens.
+    """
     quads: np.ndarray       # (faces, 4, xyz), CCW, eixo Y para cima
     normals: np.ndarray     # (faces, xyz)
     colors: np.ndarray      # (faces, rgb), uint8
@@ -19,6 +29,7 @@ class Mesh:
     base_rgb: object = None
 
     def vertex_data(self):
+        """Converte cada quad em dois triângulos no formato esperado pelo OpenGL."""
         order = [0, 1, 2, 0, 2, 3]
         positions = self.quads[:, order].reshape(-1, 3)
         normals = np.repeat(self.normals, 6, axis=0)
@@ -38,7 +49,12 @@ def read_sprite(path, max_size=96):
 
 
 def silhouette_distance(mask):
-    """Distância Manhattan até o exterior, incluindo buracos transparentes."""
+    """Calcula distância Manhattan ao exterior por duas passagens pela imagem.
+
+    A primeira passagem propaga distâncias de cima/esquerda para baixo/direita;
+    a segunda completa o resultado no sentido contrário. Pixels transparentes,
+    inclusive buracos internos, começam com distância zero.
+    """
     h, w = mask.shape
     d = np.pad(np.where(mask, h + w + 1, 0).astype('i4'), 1)
     for y in range(1, h + 1):
@@ -154,11 +170,18 @@ FACES = [
 
 
 def surface_mesh(occupied, rgb, color_sampler=None):
+    """Gera somente as faces expostas da grade tridimensional.
+
+    Para cada uma das seis orientações, compara a ocupação com a célula vizinha.
+    Uma face é criada quando o voxel existe e o vizinho naquela direção está
+    vazio ou fora do volume.
+    """
     h, w, d = occupied.shape
     padded = np.pad(occupied, 1)
     batches = []
     count = 0
     for (dy, dx, dz), normal, corners in FACES:
+        # O padding de um voxel torna as bordas equivalentes a vizinhos vazios.
         neighbor = padded[1+dy:1+dy+h, 1+dx:1+dx+w, 1+dz:1+dz+d]
         ys, xs, zs = np.nonzero(occupied & ~neighbor)
         count += len(ys)

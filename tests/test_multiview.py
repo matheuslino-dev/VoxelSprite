@@ -1,3 +1,4 @@
+"""Testes da orientação, interseção e cores de importações com várias vistas."""
 import unittest
 import tempfile
 from pathlib import Path
@@ -6,14 +7,18 @@ from voxelsprite.core import voxelize,export_obj
 
 
 def solid(h,w,color):
+    """Cria uma vista totalmente opaca preenchida com uma cor RGB."""
     image=np.full((h,w,4),255,dtype='uint8');image[:,:,:3]=color
     return image
 
 
 def face_colors(mesh,normal):
+    """Filtra as cores das faces cuja normal aponta na direção solicitada."""
     return mesh.colors[np.all(mesh.normals==normal,axis=1)]
 
 class MultiViewTests(unittest.TestCase):
+    """Verifica projeções ortográficas e o tratamento de vistas ausentes."""
+
     def test_colors_go_to_their_own_faces(self):
         front=solid(3,4,[255,0,0])
         views={'back':solid(3,4,[0,255,0]),'left':solid(3,2,[0,0,255]),'right':solid(3,2,[255,255,0])}

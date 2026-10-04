@@ -56,6 +56,8 @@ No Linux, também são necessárias as bibliotecas de sistema do Qt/XCB e do Ope
 
 Consulte o [guia completo](LEIA-ME.md) para instruções de uso, atalhos, importação de imagens, exportação e solução de problemas. Consulte também [VALIDACAO.md](VALIDACAO.md) para detalhes sobre a validação do projeto.
 
+Para entender a estrutura e a lógica do programa, consulte o [guia de leitura do código](GUIA_DO_CODIGO.md).
+
 ## Licença
 
 Consulte o arquivo [LICENSE](LICENSE).

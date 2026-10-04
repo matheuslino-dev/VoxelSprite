@@ -1,3 +1,4 @@
+"""Tema Qt, banner ilustrado e ícones pixelados usados pela interface."""
 from PySide6.QtCore import Qt,QRect
 from PySide6.QtGui import QPainter,QColor,QFont,QIcon,QPixmap,QPen
 from PySide6.QtWidgets import QWidget
@@ -27,6 +28,8 @@ QStatusBar { background:#222225; color:#aea8b7; }
 '''
 
 class Banner(QWidget):
+    """Desenha o cabeçalho original do aplicativo com formas do próprio Qt."""
+
     def __init__(self):super().__init__();self.setFixedHeight(55)
     def paintEvent(self,event):
         p=QPainter(self);p.fillRect(self.rect(),QColor('#293f47'))
@@ -51,6 +54,7 @@ PATTERNS={
 'orbit':['0001111000','0110000110','1100000011','1001110001','1001010001','1001110001','1100000011','0110000110','0011111000','0000000000']}
 
 def tool_icon(name):
+    """Converte o padrão textual de cada ferramenta em um ícone de pixels."""
     pix=QPixmap(32,32);pix.fill(Qt.GlobalColor.transparent);p=QPainter(pix)
     p.setPen(Qt.PenStyle.NoPen);p.setBrush(QColor('#e5dfe9'))
     for y,row in enumerate(PATTERNS[name]):

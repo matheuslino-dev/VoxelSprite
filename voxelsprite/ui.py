@@ -1,3 +1,4 @@
+"""Janela principal: conecta os controles Qt ao documento, viewport e exportadores."""
 from pathlib import Path
 import math
 import numpy as np
@@ -17,14 +18,20 @@ from .ortho_editor import OrthoEditor
 ROOT=Path(__file__).resolve().parent.parent
 
 class Worker(QThread):
+    """Executa uma operação demorada fora da thread da interface."""
+
     completed=Signal(object);failed=Signal(str)
     def __init__(self,fn):super().__init__();self.fn=fn
     def run(self):
+        """Emite o resultado ou a mensagem de erro para a janela principal."""
         try:self.completed.emit(self.fn())
         except Exception as exc:self.failed.emit(str(exc))
 
 class MainWindow(QMainWindow):
+    """Coordena a interface e encaminha ações para os módulos especializados."""
+
     def __init__(self):
+        """Monta painéis, ferramentas, atalhos e conexões entre sinais e slots."""
         super().__init__();self.setWindowTitle('VoxelSprite Studio 2.0');self.resize(1440,900);self.setMinimumSize(1080,720);self.setStyleSheet(STYLE)
         self.doc=Document();self.project_path=None;self.dirty=False;self.worker=None;self.busy=False
         self.paths={};self.brush_color=np.array([239,76,155],dtype='uint8');self.last_anchor=None;self.stroke_seen=set();self.stroke_tool='paint'
@@ -136,6 +143,7 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage('Grade alterada. Histórico reiniciado; salve uma cópia para manter a versão anterior.')
         except Exception as exc:self.error(exc)
     def run_job(self,fn,handler,message):
+        """Desativa controles enquanto uma tarefa de importação/exportação executa."""
         if self.busy:return
         self.busy=True;self.centralWidget().setEnabled(False);self.menuBar().setEnabled(False);self.progress.show();self.statusBar().showMessage(message)
         self.worker=Worker(fn);self.worker.completed.connect(handler);self.worker.failed.connect(self.error);self.worker.finished.connect(self.job_finished);self.worker.start()
@@ -191,6 +199,7 @@ class MainWindow(QMainWindow):
         if self.busy:return
         self.doc.begin();self.stroke_seen=set();self.stroke_tool=self.viewport.tool
     def edit_hit(self,hit,modifiers):
+        """Traduz um clique no viewport para ferramenta, modificadores e edição."""
         if self.busy:return
         point,face,ground=hit;tool=self.viewport.tool
         mods=Qt.KeyboardModifier(modifiers)
@@ -218,6 +227,7 @@ class MainWindow(QMainWindow):
             if not self.refresh_timer.isActive():self.refresh_timer.start()
         except Exception as exc:self.doc.rollback();self.error(exc)
     def end_stroke(self):
+        """Valida e confirma o traço inteiro como uma única operação de histórico."""
         self.refresh_timer.stop()
         try:
             if int(self.doc.occupied.sum())>MAX_VOXELS:raise ValueError('Limite de um milhão de voxels atingido.')
@@ -238,6 +248,7 @@ class MainWindow(QMainWindow):
     def redo(self):
         if not self.busy and self.doc.redo():self.mark_dirty();self.refresh_mesh()
     def select_rect(self,rect,append):
+        """Seleciona voxels projetados dentro do retângulo desenhado pelo usuário."""
         coords=np.argwhere(self.doc.occupied)
         if len(coords):
             xy,good=self.viewport.project(self.doc.world_centers(coords));inside=good&(xy[:,0]>=rect.left())&(xy[:,0]<=rect.right())&(xy[:,1]>=rect.top())&(xy[:,1]<=rect.bottom())
@@ -289,6 +300,7 @@ class MainWindow(QMainWindow):
     def settings(self):
         return {'lighting':self.lighting.isChecked(),'outline':self.outline.isChecked(),'background':list(self.viewport.background),'outline_color':list(self.viewport.outline_color),'light_yaw':self.light_yaw.value(),'light_pitch':self.light_pitch.value(),'brush_color':self.brush_color.tolist()}
     def save(self,save_as=False):
+        """Salva o documento e as opções visuais no arquivo JSON do projeto."""
         if self.busy:return False
         path=self.project_path
         if save_as or path is None:
@@ -299,6 +311,7 @@ class MainWindow(QMainWindow):
             save_project(self.doc,path,self.settings());self.project_path=Path(path);self.dirty=False;self.setWindowTitle(f'VoxelSprite Studio 2.0 • {self.project_path.name}');self.statusBar().showMessage('Projeto salvo com todas as cores por face.');return True
         except Exception as exc:self.error(exc);return False
     def load(self):
+        """Carrega um projeto validado e restaura opções visuais compatíveis."""
         if self.busy:return
         path,_=QFileDialog.getOpenFileName(self,'Abrir projeto','','Projeto VoxelSprite (*.json)')
         if not path or not self.confirm_discard():return
@@ -316,6 +329,7 @@ class MainWindow(QMainWindow):
             self.update_view();self.setWindowTitle(f'VoxelSprite Studio 2.0 • {Path(path).name}')
         except Exception as exc:self.error(exc)
     def export_dialog(self):
+        """Escolhe um destino e encaminha o documento ao exportador apropriado."""
         if self.busy:return
         if not self.doc.occupied.any():self.error('Crie ou importe um modelo primeiro.');return
         dialog=ExportDialog(self)
@@ -338,6 +352,7 @@ class MainWindow(QMainWindow):
         try:self.export_sprites(kind,path,int(dialog.size.currentText()),dialog.pitch.value(),dialog.frames.value(),dialog.duration.value())
         except Exception as exc:self.error(exc)
     def export_sprites(self,kind,path,size,pitch,frames=16,duration=100):
+        """Renderiza ângulos da câmera e monta PNG, folha, GIF ou preset RPG Maker."""
         if kind==1:
             self.viewport.render_sprite(size).save(path);self.statusBar().showMessage(f'PNG exportado: {path}');return
         count=8 if kind==2 else 16 if kind==3 else 4 if kind==6 else frames

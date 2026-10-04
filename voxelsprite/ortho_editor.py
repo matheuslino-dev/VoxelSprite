@@ -11,12 +11,15 @@ from .document import Document
 from .core import voxelize,fit_view
 
 class PixelCanvas(__import__('PySide6.QtWidgets',fromlist=['QWidget']).QWidget):
+    """Canvas de pixels com ferramentas simples e histórico local por vista."""
+
     changed=Signal();picked=Signal(object)
     def __init__(self,array):
         super().__init__();self.array=array.copy();self.scale=8;self.tool='paint';self.color=np.array([255,70,160],dtype='uint8');self.size=1
         self.stroke=False;self.before=None;self.history=[];self.redos=[];self.last=None;self.update_size()
     def update_size(self):self.setFixedSize(self.array.shape[1]*self.scale,self.array.shape[0]*self.scale);self.update()
     def paintEvent(self,event):
+        """Composita a transparência sobre quadriculado e desenha a grade de pixels."""
         h,w,_=self.array.shape;yy,xx=np.indices((h,w));bg=np.where(((xx//4+yy//4)%2)[...,None],65,43)
         a=self.array[:,:,3:4]/255;rgb=np.ascontiguousarray(self.array[:,:,:3]*a+bg*(1-a),dtype='uint8')
         image=QImage(rgb.data,w,h,w*3,QImage.Format.Format_RGB888).copy()
@@ -28,10 +31,12 @@ class PixelCanvas(__import__('PySide6.QtWidgets',fromlist=['QWidget']).QWidget):
         p.end()
     def point(self,event):return int(event.position().x()//self.scale),int(event.position().y()//self.scale)
     def dab(self,x,y):
+        """Aplica uma ação num pixel: amostrar, preencher, apagar ou pintar."""
         h,w,_=self.array.shape
         if not (0<=x<w and 0<=y<h):return
         if self.tool=='pick':self.picked.emit(self.array[y,x,:3].copy());return
         if self.tool=='fill':
+            # Busca em largura limita o balde aos pixels vizinhos com a cor inicial.
             old=self.array[y,x].copy();new=np.array([*self.color,255],dtype='uint8')
             if np.array_equal(old,new):return
             q=deque([(x,y)]);seen={(x,y)}
@@ -69,6 +74,8 @@ class PixelCanvas(__import__('PySide6.QtWidgets',fromlist=['QWidget']).QWidget):
         if self.redos:self.history.append(self.array.copy());self.array=self.redos.pop();self.changed.emit();self.update()
 
 class OrthoEditor(QDialog):
+    """Permite pintar seis projeções e reconstruir delas um novo documento 3D."""
+
     def __init__(self,doc,color,parent=None):
         super().__init__(parent);self.setWindowTitle('3D ORTHO · editar vistas em pixels');self.resize(840,680);self.result_document=None
         self.color=np.array(color,dtype='uint8');self.depth=doc.occupied.shape[2]
@@ -94,6 +101,7 @@ class OrthoEditor(QDialog):
         self.set_color(self.color)
     def current(self):return list(self.canvases.values())[self.tabs.currentIndex()]
     def controls_changed(self,*args):
+        """Propaga ferramenta, tamanho e zoom para todos os canvases."""
         for canvas in self.canvases.values():canvas.tool=['paint','erase','fill','pick'][self.tool.currentIndex()];canvas.size=self.brush.value();canvas.scale=self.zoom.value();canvas.update_size()
     def set_color(self,color):
         self.color=np.array(color,dtype='uint8');self.color_button.setStyleSheet(f'background:{QColor(*map(int,color)).name()};')
@@ -102,6 +110,7 @@ class OrthoEditor(QDialog):
         c=QColorDialog.getColor(QColor(*map(int,self.color)),self,'Cor')
         if c.isValid():self.set_color(c.getRgb()[:3])
     def reconstruct(self):
+        """Usa apenas vistas ativas para gerar um volume por interseção de silhuetas."""
         images={key:canvas.array.copy() for key,canvas in self.canvases.items() if self.enabled[key].isChecked() and canvas.array[:,:,3].any()}
         if not images:raise ValueError('Pinte ou ative pelo menos uma vista.')
         if 'front' in images:front=images.pop('front')
@@ -111,5 +120,6 @@ class OrthoEditor(QDialog):
         mesh=voxelize(front,self.depth,0,128,images,True,'dominant')
         return Document.from_mesh(mesh,padding=0)
     def apply(self):
+        """Reconstrói o modelo e fecha o diálogo; mostra erros sem perder as vistas."""
         try:self.result_document=self.reconstruct();self.accept()
         except Exception as exc:QMessageBox.warning(self,'Reconstrução',str(exc))

@@ -1,3 +1,4 @@
+"""Diálogos Qt para selecionar imagens de entrada e opções de exportação."""
 from pathlib import Path
 import numpy as np
 from PySide6.QtCore import Qt
@@ -9,12 +10,15 @@ from .core import read_sprite
 NAMES={'front':'Frente','back':'Costas','left':'Esquerda','right':'Direita','top':'Topo','bottom':'Base'}
 
 def thumbnail(path,size=80):
+    """Cria miniatura com fundo quadriculado para mostrar transparência."""
     a,_=read_sprite(path,128);h,w,_=a.shape;yy,xx=np.indices((h,w));bg=np.where(((xx//4+yy//4)%2)[...,None],65,45)
     alpha=a[:,:,3:4]/255
     rgb=np.ascontiguousarray(a[:,:,:3]*alpha+bg*(1-alpha),dtype='uint8')
     return QPixmap.fromImage(QImage(rgb.data,w,h,w*3,QImage.Format.Format_RGB888).copy()).scaled(size,size,Qt.AspectRatioMode.KeepAspectRatio,Qt.TransformationMode.FastTransformation)
 
 class ImportDialog(QDialog):
+    """Reúne imagens e parâmetros que serão enviados ao reconstruidor 3D."""
+
     def __init__(self,parent=None,paths=None):
         super().__init__(parent);self.setWindowTitle('Importar vistas ortográficas');self.resize(620,600)
         self.paths=dict(paths or {});self.thumbs={};self.labels={}
@@ -41,24 +45,30 @@ class ImportDialog(QDialog):
         buttons=QDialogButtonBox(QDialogButtonBox.StandardButton.Ok|QDialogButtonBox.StandardButton.Cancel);buttons.button(QDialogButtonBox.StandardButton.Ok).setText('Gerar modelo');buttons.accepted.connect(self.accept_checked);buttons.rejected.connect(self.reject);layout.addWidget(buttons)
         self.refresh()
     def choose(self,key):
+        """Abre o seletor de arquivo e valida a imagem antes de mostrá-la."""
         p,_=QFileDialog.getOpenFileName(self,'Abrir '+NAMES[key],'','Imagens (*.png *.webp *.bmp *.jpg *.jpeg)')
         if p:
             try:read_sprite(p,128);self.paths[key]=p;self.refresh()
             except Exception as exc:QMessageBox.warning(self,'Imagem inválida',str(exc))
     def remove(self,key):self.paths.pop(key,None);self.refresh()
     def refresh(self):
+        """Atualiza miniaturas, nomes e disponibilidade do controle de arredondamento."""
         for key in NAMES:
             p=self.paths.get(key)
             if p:self.thumbs[key].setPixmap(thumbnail(p));self.labels[key].setText(Path(p).name);self.labels[key].setToolTip(str(p))
             else:self.thumbs[key].clear();self.thumbs[key].setText('SEM IMAGEM');self.labels[key].setText('Matemática')
         self.roundness.setEnabled(not bool({'left','right','top','bottom'}&self.paths.keys()))
     def accept_checked(self):
+        """Impede iniciar a importação sem nenhuma vista carregada."""
         if not self.paths:QMessageBox.warning(self,'Importar','Carregue pelo menos uma vista.');return
         self.accept()
     def options(self):
+        """Agrupa os controles do diálogo nos argumentos esperados pelo motor."""
         return dict(paths=self.paths,resolution=int(self.resolution.currentText()),depth=self.depth.value(),roundness=self.roundness.value(),alpha=self.alpha.value(),mirror=self.mirror.isChecked(),fallback='dominant' if self.fallback.currentIndex()==0 else 'front')
 
 class ExportDialog(QDialog):
+    """Seleciona o formato e expõe somente as opções relevantes a ele."""
+
     def __init__(self,parent=None):
         super().__init__(parent);self.setWindowTitle('Exportar');layout=QVBoxLayout(self);self.resize(410,340)
         self.kind=QComboBox();self.kind.addItems(['OBJ + MTL + atlas PNG','PNG · ângulo atual (reenquadrado)','Spritesheet · 8 direções','Spritesheet · 16 direções','GIF · rotação 360°','6 vistas ortográficas PNG','RPG Maker · personagem estático'])
@@ -71,4 +81,5 @@ class ExportDialog(QDialog):
         buttons=QDialogButtonBox(QDialogButtonBox.StandardButton.Save|QDialogButtonBox.StandardButton.Cancel);buttons.accepted.connect(self.accept);buttons.rejected.connect(self.reject);layout.addWidget(buttons)
         self.kind.currentIndexChanged.connect(self.update_fields);self.update_fields()
     def update_fields(self):
+        """Habilita os campos de tamanho, ângulo e animação conforme o formato."""
         i=self.kind.currentIndex();self.size.setEnabled(i not in (0,5));self.pitch.setEnabled(i in (2,3,4,6));self.frames.setEnabled(i==4);self.duration.setEnabled(i==4)

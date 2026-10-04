@@ -12,6 +12,8 @@ from .core import FACES
 from .exports import outline_image
 
 class Viewport(QOpenGLWidget):
+    """Área interativa 3D: desenha o modelo e converte entrada do mouse em ações."""
+
     failed=Signal(str)
     stroke_started=Signal()
     stroke_finished=Signal()
@@ -32,6 +34,7 @@ class Viewport(QOpenGLWidget):
         self.setMinimumSize(320,300);self.setMouseTracking(True);self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
     def initializeGL(self):
+        """Cria o contexto OpenGL e os recursos da cena quando Qt inicializa a área."""
         try:
             self.ctx=moderngl.create_context(require=330);self.scene=Scene(self.ctx)
             self.context().aboutToBeDestroyed.connect(self.cleanup)
@@ -40,6 +43,7 @@ class Viewport(QOpenGLWidget):
             self.error=f'Não foi possível iniciar OpenGL 3.3. Atualize o driver de vídeo.\n{exc}';self.failed.emit(self.error)
 
     def set_document(self,doc,reset=True):
+        """Atualiza o documento e regenera a malha exibida."""
         self.doc=doc;self.mesh=doc.mesh() if doc else None;self.dirty=True
         if reset:self.hover=None
         if reset:self.reset_camera()
@@ -49,6 +53,7 @@ class Viewport(QOpenGLWidget):
         self.mesh=mesh;self.dirty=True;self.reset_camera()
 
     def reset_camera(self,front=False):
+        """Enquadra o modelo e posiciona a câmera na vista inicial ou frontal."""
         self.yaw,self.pitch=(0.,0.) if front else (35.,25.)
         self.target=np.zeros(3)
         if self.mesh is not None and len(self.mesh.quads):
@@ -69,6 +74,7 @@ class Viewport(QOpenGLWidget):
             self.dirty=False
 
     def paintGL(self):
+        """Renderiza em resolução reduzida e amplia por vizinho mais próximo."""
         if self.error or not self.ctx:return
         try:
             self._upload()
@@ -128,11 +134,13 @@ class Viewport(QOpenGLWidget):
         painter.end()
 
     def ray(self,pos):
+        """Transforma a posição do mouse em origem e direção de um raio no mundo."""
         inv=np.linalg.inv(self.matrix());x=2*pos.x()/self.width()-1;y=1-2*pos.y()/self.height()
         a=inv@np.array([x,y,-1,1]);b=inv@np.array([x,y,1,1]);a=a[:3]/a[3];b=b[:3]/b[3]
         v=b-a;v/=np.linalg.norm(v);return a,v
 
     def pick(self,pos):
+        """Busca voxel sob o cursor; se não houver, testa o plano do chão da grade."""
         if not self.doc:return None
         origin,direction=self.ray(pos);hit=raycast(self.doc,origin,direction)
         if hit:return hit
@@ -162,6 +170,7 @@ class Viewport(QOpenGLWidget):
         self.update()
 
     def mouseMoveEvent(self,event):
+        """Interpreta arrastes como pan, órbita, transformação da seleção ou pintura."""
         delta=event.position()-self.last if self.last else QPointF()
         self.last=event.position()
         if event.buttons()&Qt.MouseButton.MiddleButton or (self.space and event.buttons()&Qt.MouseButton.LeftButton):
@@ -210,6 +219,7 @@ class Viewport(QOpenGLWidget):
         super().focusOutEvent(event)
 
     def render_sprite(self,size=256,yaw=None,pitch=None,fit=True):
+        """Renderiza um quadro fora da janela, usado por exportações de imagem."""
         if not self.ctx or self.error:raise ValueError('A exportação de sprites precisa da visualização OpenGL funcionando.')
         self.makeCurrent();self._upload()
         try:
@@ -225,11 +235,13 @@ class Viewport(QOpenGLWidget):
         finally:self.doneCurrent();self.update()
 
     def release_target(self):
+        """Libera framebuffer, textura e buffer de profundidade da prévia."""
         for r in (self.render_fbo,self.render_depth,self.render_texture):
             if r is not None:r.release()
         self.render_fbo=self.render_depth=self.render_texture=None
 
     def cleanup(self):
+        """Solta todos os recursos OpenGL antes de destruir o contexto."""
         if self.ctx is None:return
         self.makeCurrent();self.release_target()
         if self.scene:self.scene.release()
